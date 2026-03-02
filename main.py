@@ -105,3 +105,110 @@ def setup_logging(verbose: bool = False) -> logging.Logger:
 # -----------------------------------------------------------------------------
 def load_config(path: Optional[str] = None) -> AvaAIConfig:
     p = path or os.path.join(AVAAI_CONFIG_DIR, "config.json")
+    cfg = AvaAIConfig()
+    cfg.contract_address = os.environ.get(AVAAI_CONTRACT_ADDRESS_ENV)
+    cfg.rpc_url = os.environ.get(AVAAI_RPC_ENV) or cfg.rpc_url
+    cfg.private_key = os.environ.get(AVAAI_PRIVATE_KEY_ENV)
+    if os.path.isfile(p):
+        try:
+            with open(p, "r") as f:
+                data = json.load(f)
+            cfg.rpc_url = data.get("rpc_url", cfg.rpc_url)
+            cfg.contract_address = data.get("contract_address") or cfg.contract_address
+            cfg.chain_id = data.get("chain_id", cfg.chain_id)
+            if data.get("private_key"):
+                cfg.private_key = data["private_key"]
+            cfg.gas_limit_default = data.get("gas_limit_default", cfg.gas_limit_default)
+            cfg.gas_price_gwei = data.get("gas_price_gwei")
+        except Exception:
+            pass
+    return cfg
+
+
+def save_config(cfg: AvaAIConfig, path: Optional[str] = None) -> None:
+    p = path or os.path.join(AVAAI_CONFIG_DIR, "config.json")
+    Path(AVAAI_CONFIG_DIR).mkdir(parents=True, exist_ok=True)
+    data = {
+        "rpc_url": cfg.rpc_url,
+        "contract_address": cfg.contract_address,
+        "chain_id": cfg.chain_id,
+        "gas_limit_default": cfg.gas_limit_default,
+        "gas_price_gwei": cfg.gas_price_gwei,
+    }
+    if cfg.private_key:
+        data["private_key"] = cfg.private_key
+    with open(p, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+# -----------------------------------------------------------------------------
+# Web3 helpers (optional dependency)
+# -----------------------------------------------------------------------------
+def _try_import_web3() -> Any:
+    try:
+        from web3 import Web3
+        return Web3
+    except ImportError:
+        return None
+
+
+def wei_to_human(wei: int, decimals: int = AVAAI_DECIMALS) -> str:
+    d = Decimal(wei) / Decimal(10 ** decimals)
+    return str(d.quantize(Decimal(10) ** -min(decimals, 8)))
+
+
+def human_to_wei(amount: str, decimals: int = AVAAI_DECIMALS) -> int:
+    d = Decimal(amount) * Decimal(10 ** decimals)
+    return int(d)
+
+
+def bps_to_percent(bps: int) -> str:
+    return f"{(bps / AVAAI_BPS) * 100:.2f}%"
+
+
+# -----------------------------------------------------------------------------
+# Contract interface (read-only when no web3)
+# -----------------------------------------------------------------------------
+class FundManagerAIClient:
+    def __init__(self, config: AvaAIConfig, log: Optional[logging.Logger] = None):
+        self.config = config
+        self.log = log or logging.getLogger(AVAAI_APP_NAME)
+        self._w3 = None
+        self._contract = None
+        self._account = None
+        if config.contract_address and config.rpc_url:
+            self._init_web3()
+
+    def _init_web3(self) -> None:
+        Web3 = _try_import_web3()
+        if not Web3:
+            self.log.warning("web3 not installed; run: pip install web3")
+            return
+        self._w3 = Web3(Web3.HTTPProvider(self.config.rpc_url))
+        if not self._w3.is_connected():
+            self.log.warning("RPC not connected: %s", self.config.rpc_url)
+            return
+        self._contract = self._w3.eth.contract(
+            address=Web3.to_checksum_address(self.config.contract_address),
+            abi=FMAI_ABI,
+        )
+        if self.config.private_key:
+            try:
+                from eth_account import Account
+                self._account = Account.from_key(self.config.private_key)
+            except Exception as e:
+                self.log.warning("Could not load account: %s", e)
+
+    @property
+    def is_ready(self) -> bool:
+        return self._contract is not None and (self._w3 is not None and self._w3.is_connected())
+
+    def get_global_stats(self) -> Optional[GlobalStats]:
+        if not self.is_ready:
+            return None
+        try:
+            r = self._contract.functions.getGlobalStats().call()
+            return GlobalStats(
+                total_deposited=r[0],
+                total_withdrawn=r[1],
+                total_yield_harvested=r[2],
