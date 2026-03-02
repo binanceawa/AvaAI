@@ -319,3 +319,110 @@ class FundManagerAIClient:
                 "gas": self.config.gas_limit_default,
             })
             if self.config.gas_price_gwei:
+                tx["gasPrice"] = self._w3.to_wei(self.config.gas_price_gwei, "gwei")
+            signed = self._w3.eth.account.sign_transaction(tx, self.config.private_key)
+            tx_hash = self._w3.eth.send_raw_transaction(signed.raw_transaction)
+            return self._w3.to_hex(tx_hash)
+        except Exception as e:
+            self.log.error("deposit failed: %s", e)
+            return None
+
+    def withdraw(self, token: str, amount_wei: int) -> Optional[str]:
+        if not self.is_ready or not self._account:
+            self.log.error("Not ready or no account for withdraw")
+            return None
+        try:
+            tx = self._contract.functions.withdraw(
+                self._w3.to_checksum_address(token),
+                amount_wei,
+            ).build_transaction({
+                "from": self._account.address,
+                "gas": self.config.gas_limit_default,
+            })
+            if self.config.gas_price_gwei:
+                tx["gasPrice"] = self._w3.to_wei(self.config.gas_price_gwei, "gwei")
+            signed = self._w3.eth.account.sign_transaction(tx, self.config.private_key)
+            tx_hash = self._w3.eth.send_raw_transaction(signed.raw_transaction)
+            return self._w3.to_hex(tx_hash)
+        except Exception as e:
+            self.log.error("withdraw failed: %s", e)
+            return None
+
+    def claim_yield(self, token: str) -> Optional[str]:
+        if not self.is_ready or not self._account:
+            self.log.error("Not ready or no account for claimYield")
+            return None
+        try:
+            tx = self._contract.functions.claimYield(
+                self._w3.to_checksum_address(token),
+            ).build_transaction({
+                "from": self._account.address,
+                "gas": self.config.gas_limit_default,
+            })
+            if self.config.gas_price_gwei:
+                tx["gasPrice"] = self._w3.to_wei(self.config.gas_price_gwei, "gwei")
+            signed = self._w3.eth.account.sign_transaction(tx, self.config.private_key)
+            tx_hash = self._w3.eth.send_raw_transaction(signed.raw_transaction)
+            return self._w3.to_hex(tx_hash)
+        except Exception as e:
+            self.log.error("claimYield failed: %s", e)
+            return None
+
+
+# -----------------------------------------------------------------------------
+# CLI: stats
+# -----------------------------------------------------------------------------
+def cmd_stats(client: FundManagerAIClient, _args: argparse.Namespace, log: logging.Logger) -> int:
+    stats = client.get_global_stats()
+    if not stats:
+        log.error("Could not fetch global stats (check RPC and contract address)")
+        return 1
+    log.info("=== FundManagerAI global stats ===")
+    log.info("Total deposited:  %s wei", stats.total_deposited)
+    log.info("Total withdrawn:  %s wei", stats.total_withdrawn)
+    log.info("Total yield:      %s wei", stats.total_yield_harvested)
+    log.info("Strategies:       %s", stats.strategy_count)
+    log.info("Paused:           %s", stats.paused)
+    perf_bps, dep_bps = client.get_fee_config()
+    log.info("Performance fee:  %s (%s bps)", bps_to_percent(perf_bps), perf_bps)
+    log.info("Deposit fee:      %s (%s bps)", bps_to_percent(dep_bps), dep_bps)
+    return 0
+
+
+# -----------------------------------------------------------------------------
+# CLI: strategies
+# -----------------------------------------------------------------------------
+def cmd_strategies(client: FundManagerAIClient, _args: argparse.Namespace, log: logging.Logger) -> int:
+    n = client.get_strategy_count()
+    if n == 0:
+        log.info("No strategies")
+        return 0
+    log.info("=== Strategies (count=%s) ===", n)
+    for i in range(1, n + 1):
+        s = client.get_strategy(i)
+        if not s:
+            continue
+        log.info("  [%s] target=%s token=%s allocated=%s harvested=%s cap_bps=%s active=%s",
+                 s.strategy_id, s.target[:10] + "..", s.token[:10] + "..",
+                 s.allocated, s.harvested, s.cap_bps, s.active)
+    return 0
+
+
+# -----------------------------------------------------------------------------
+# CLI: tokens
+# -----------------------------------------------------------------------------
+def cmd_tokens(client: FundManagerAIClient, _args: argparse.Namespace, log: logging.Logger) -> int:
+    tokens = client.get_token_list()
+    if not tokens:
+        log.info("No tokens in list (or RPC/contract not ready)")
+        return 0
+    log.info("=== Allowed tokens (%s) ===", len(tokens))
+    for t in tokens:
+        log.info("  %s", t)
+    return 0
+
+
+# -----------------------------------------------------------------------------
+# CLI: position
+# -----------------------------------------------------------------------------
+def cmd_position(client: FundManagerAIClient, args: argparse.Namespace, log: logging.Logger) -> int:
