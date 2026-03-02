@@ -1282,3 +1282,110 @@ def avaai_aggregate_allocated(strategies: List[StrategyInfo]) -> int:
 def avaai_aggregate_harvested(strategies: List[StrategyInfo]) -> int:
     return sum(s.harvested for s in strategies)
 
+
+def avaai_unique_tokens_from_strategies(strategies: List[StrategyInfo]) -> List[str]:
+    seen = set()
+    out = []
+    for s in strategies:
+        t = (s.token or "").strip().lower()
+        if t and t not in seen:
+            seen.add(t)
+            out.append(s.token)
+    return out
+
+
+def avaai_merge_config_with_env(cfg: AvaAIConfig) -> AvaAIConfig:
+    if avaai_env_rpc():
+        cfg.rpc_url = avaai_env_rpc() or cfg.rpc_url
+    if avaai_env_contract():
+        cfg.contract_address = avaai_env_contract() or cfg.contract_address
+    if avaai_env_private_key():
+        cfg.private_key = avaai_env_private_key() or cfg.private_key
+    return cfg
+
+
+def avaai_load_config_from_dict(d: Dict[str, Any]) -> AvaAIConfig:
+    return avaai_dict_to_config(d)
+
+
+def avaai_save_config_to_dict(cfg: AvaAIConfig) -> Dict[str, Any]:
+    return avaai_config_to_dict(cfg)
+
+
+def avaai_log_global_stats(stats: GlobalStats, log: logging.Logger) -> None:
+    log.info("total_deposited=%s total_withdrawn=%s total_yield=%s strategy_count=%s paused=%s",
+             stats.total_deposited, stats.total_withdrawn, stats.total_yield_harvested,
+             stats.strategy_count, stats.paused)
+
+
+def avaai_log_strategy(s: StrategyInfo, log: logging.Logger) -> None:
+    log.info("strategy #%s target=%s token=%s allocated=%s harvested=%s cap_bps=%s active=%s",
+             s.strategy_id, avaai_short_address(s.target), avaai_short_address(s.token),
+             s.allocated, s.harvested, s.cap_bps, s.active)
+
+
+def avaai_log_position(user: str, token: str, balance: int, claimable: int, log: logging.Logger) -> None:
+    log.info("user=%s token=%s balance=%s claimable=%s", avaai_short_address(user),
+             avaai_short_address(token), balance, claimable)
+
+
+def avaai_assert_positive_wei(wei: int, name: str = "amount") -> None:
+    if wei < 0:
+        raise ValueError(f"{name} must be non-negative, got {wei}")
+
+
+def avaai_assert_valid_address(addr: str, name: str = "address") -> None:
+    if not avaai_validate_address(addr):
+        raise ValueError(f"invalid {name}: {addr}")
+
+
+def avaai_assert_valid_bps(bps: int, name: str = "bps") -> None:
+    if not avaai_validate_bps(bps):
+        raise ValueError(f"invalid {name}: {bps} (must be 0..10000)")
+
+
+def avaai_assert_config(cfg: AvaAIConfig) -> None:
+    errs = avaai_validate_config(cfg)
+    if errs:
+        raise ValueError("config validation failed: " + "; ".join(errs))
+
+
+def avaai_hex_prefix(addr: str) -> str:
+    if addr and not addr.startswith("0x"):
+        return "0x" + addr
+    return addr or ""
+
+
+def avaai_strip_hex_prefix(addr: str) -> str:
+    if addr and addr.startswith("0x"):
+        return addr[2:]
+    return addr or ""
+
+
+def avaai_wei_to_gwei(wei: int) -> float:
+    return wei / 1e9
+
+
+def avaai_gwei_to_wei(gwei: float) -> int:
+    return int(gwei * 1e9)
+
+
+def avaai_wei_to_ether_str(wei: int) -> str:
+    return wei_to_human(wei, 18)
+
+
+def avaai_ether_str_to_wei(s: str) -> int:
+    return human_to_wei(s, 18)
+
+
+def avaai_format_fee_bps(bps: int) -> str:
+    return f"{bps} bps ({avaai_percent_from_bps(bps):.2f}%)"
+
+
+def avaai_parse_fee_bps(s: str) -> Optional[int]:
+    try:
+        return int(s.strip())
+    except ValueError:
+        return None
+
+
