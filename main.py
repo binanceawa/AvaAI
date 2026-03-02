@@ -747,3 +747,110 @@ def avaai_save_simulator_to_json(sim: AvaAISimulator, path: str) -> bool:
         return True
     except Exception:
         return False
+
+
+# -----------------------------------------------------------------------------
+# CLI: simulate
+# -----------------------------------------------------------------------------
+def cmd_simulate(client: FundManagerAIClient, args: argparse.Namespace, log: logging.Logger) -> int:
+    sim = AvaAISimulator()
+    sim.add_strategy("0x" + "a" * 40, "0x" + "b" * 40, 5000)
+    sim.deposit_sim("0x" + "c" * 40, "0x" + "b" * 40, 1000 * 10**18, 10)
+    sim.credit_yield_sim("0x" + "c" * 40, "0x" + "b" * 40, 50 * 10**18)
+    stats = sim.get_stats_sim()
+    log.info("Simulated stats: deposited=%s withdrawn=%s yield=%s strategies=%s",
+             stats.total_deposited, stats.total_withdrawn, stats.total_yield_harvested, stats.strategy_count)
+    return 0
+
+
+# -----------------------------------------------------------------------------
+# CLI: export
+# -----------------------------------------------------------------------------
+def cmd_export(client: FundManagerAIClient, args: argparse.Namespace, log: logging.Logger) -> int:
+    stats = client.get_global_stats()
+    if not stats:
+        log.error("Could not fetch stats")
+        return 1
+    perf_bps, dep_bps = client.get_fee_config()
+    constants = client.get_constants_bundle()
+    out = avaai_export_stats_json(stats, (perf_bps, dep_bps), constants)
+    if args.output:
+        with open(args.output, "w") as f:
+            f.write(out)
+        log.info("Wrote %s", args.output)
+    else:
+        print(out)
+    return 0
+
+
+# -----------------------------------------------------------------------------
+# Extra format and validation
+# -----------------------------------------------------------------------------
+def avaai_format_bps(bps: int) -> str:
+    return f"{bps} bps ({bps_to_percent(bps)})"
+
+
+def avaai_wei_to_eth(wei: int) -> str:
+    return wei_to_human(wei, 18)
+
+
+def avaai_eth_to_wei(eth: str) -> int:
+    return human_to_wei(eth, 18)
+
+
+def avaai_ensure_config_dir() -> str:
+    Path(AVAAI_CONFIG_DIR).mkdir(parents=True, exist_ok=True)
+    return AVAAI_CONFIG_DIR
+
+
+def avaai_config_path() -> str:
+    return os.path.join(AVAAI_CONFIG_DIR, "config.json")
+
+
+def avaai_default_contract_env() -> str:
+    return AVAAI_CONTRACT_ADDRESS_ENV
+
+
+def avaai_default_rpc_env() -> str:
+    return AVAAI_RPC_ENV
+
+
+def avaai_chain_name(chain_id: int) -> str:
+    if chain_id == 1:
+        return "mainnet"
+    if chain_id == 11155111:
+        return "sepolia"
+    return f"chain_{chain_id}"
+
+
+def avaai_parse_chain_id(s: str) -> Optional[int]:
+    s = s.strip().lower()
+    if s in ("mainnet", "1", "eth"):
+        return 1
+    if s in ("sepolia", "11155111"):
+        return 11155111
+    try:
+        return int(s)
+    except ValueError:
+        return None
+
+
+def avaai_help_text_stats() -> str:
+    return "Show global stats (deposited, withdrawn, yield, strategies, fees) from the FundManagerAI contract."
+
+
+def avaai_help_text_strategies() -> str:
+    return "List all strategies (id, target, token, allocated, harvested, cap_bps, active)."
+
+
+def avaai_help_text_tokens() -> str:
+    return "List allowed token addresses from the contract."
+
+
+def avaai_help_text_position() -> str:
+    return "Show deposit balance and claimable yield per token for a user."
+
+
+def avaai_help_text_deposit() -> str:
+    return "Submit a deposit transaction (requires private key and token approval)."
+
