@@ -426,3 +426,110 @@ def cmd_tokens(client: FundManagerAIClient, _args: argparse.Namespace, log: logg
 # CLI: position
 # -----------------------------------------------------------------------------
 def cmd_position(client: FundManagerAIClient, args: argparse.Namespace, log: logging.Logger) -> int:
+    user = args.user or (client._account.address if client._account else None)
+    if not user:
+        log.error("Provide --user or set private key")
+        return 1
+    tokens = client.get_token_list()
+    if not tokens:
+        tokens = [args.token] if args.token else []
+    if not tokens:
+        log.error("No tokens; use --token ADDRESS or ensure contract has token list")
+        return 1
+    log.info("=== Position for %s ===", user[:12] + "..")
+    for token in tokens:
+        bal = client.get_deposit_balance(user, token)
+        claim = client.get_claimable_yield(user, token)
+        if bal is None and claim is None:
+            continue
+        log.info("  token %s: balance=%s wei, claimable_yield=%s wei",
+                 token[:12] + "..", bal or 0, claim or 0)
+        if args.human:
+            log.info("    -> balance=%s, claimable=%s", wei_to_human(bal or 0), wei_to_human(claim or 0))
+    return 0
+
+
+# -----------------------------------------------------------------------------
+# CLI: deposit / withdraw / claim
+# -----------------------------------------------------------------------------
+def cmd_deposit(client: FundManagerAIClient, args: argparse.Namespace, log: logging.Logger) -> int:
+    amount_wei = human_to_wei(args.amount) if args.human else int(args.amount)
+    tx = client.deposit(args.token, amount_wei)
+    if not tx:
+        return 1
+    log.info("Deposit tx: %s", tx)
+    return 0
+
+
+def cmd_withdraw(client: FundManagerAIClient, args: argparse.Namespace, log: logging.Logger) -> int:
+    amount_wei = human_to_wei(args.amount) if args.human else int(args.amount)
+    tx = client.withdraw(args.token, amount_wei)
+    if not tx:
+        return 1
+    log.info("Withdraw tx: %s", tx)
+    return 0
+
+
+def cmd_claim(client: FundManagerAIClient, args: argparse.Namespace, log: logging.Logger) -> int:
+    tx = client.claim_yield(args.token)
+    if not tx:
+        return 1
+    log.info("Claim yield tx: %s", tx)
+    return 0
+
+
+# -----------------------------------------------------------------------------
+# CLI: config
+# -----------------------------------------------------------------------------
+def cmd_config_get(client: FundManagerAIClient, _args: argparse.Namespace, log: logging.Logger) -> int:
+    c = client.config
+    log.info("rpc_url=%s", c.rpc_url)
+    log.info("contract_address=%s", c.contract_address or "(not set)")
+    log.info("chain_id=%s", c.chain_id)
+    log.info("private_key=%s", "***" if c.private_key else "(not set)")
+    return 0
+
+
+def cmd_config_set(args: argparse.Namespace, log: logging.Logger) -> int:
+    cfg = load_config(args.config)
+    if args.rpc:
+        cfg.rpc_url = args.rpc
+    if args.contract:
+        cfg.contract_address = args.contract
+    if args.chain_id is not None:
+        cfg.chain_id = args.chain_id
+    save_config(cfg, args.config)
+    log.info("Config saved")
+    return 0
+
+
+# -----------------------------------------------------------------------------
+# Yield math and simulation (AvaAI-specific)
+# -----------------------------------------------------------------------------
+def avaai_fee_from_bps(amount_wei: int, bps: int) -> int:
+    return (amount_wei * bps) // AVAAI_BPS
+
+
+def avaai_net_after_deposit_fee(amount_wei: int, dep_bps: int) -> int:
+    return amount_wei - avaai_fee_from_bps(amount_wei, dep_bps)
+
+
+def avaai_net_after_perf_fee(amount_wei: int, perf_bps: int) -> int:
+    return amount_wei - avaai_fee_from_bps(amount_wei, perf_bps)
+
+
+def avaai_vested_amount(vesting_amount: int, start_block: int, end_block: int, current_block: int) -> int:
+    if current_block >= end_block:
+        return vesting_amount
+    if current_block <= start_block:
+        return 0
+    elapsed = current_block - start_block
+    duration = end_block - start_block
+    if duration == 0:
+        return 0
+    return (vesting_amount * elapsed) // duration
+
+
+def avaai_estimate_apy_from_harvest(harvested_wei: int, allocated_wei: int, blocks_per_year: int = 2_628_000) -> str:
+    if allocated_wei == 0:
+        return "0%"
