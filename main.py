@@ -1496,3 +1496,110 @@ def avaai_diff_config(current: AvaAIConfig, template: Dict[str, Any]) -> List[st
     if template.get("chain_id") != current.chain_id:
         diff.append("chain_id")
     return diff
+
+
+def avaai_apply_template_to_config(cfg: AvaAIConfig, template: Dict[str, Any]) -> AvaAIConfig:
+    cfg.rpc_url = template.get("rpc_url") or cfg.rpc_url
+    cfg.contract_address = template.get("contract_address") or cfg.contract_address
+    cfg.chain_id = template.get("chain_id", cfg.chain_id)
+    cfg.gas_limit_default = template.get("gas_limit_default", cfg.gas_limit_default)
+    cfg.gas_price_gwei = template.get("gas_price_gwei")
+    return cfg
+
+
+def avaai_env_chain_id() -> Optional[int]:
+    v = os.environ.get("AVAAI_CHAIN_ID")
+    if v is None:
+        return None
+    try:
+        return int(v)
+    except ValueError:
+        return None
+
+
+def avaai_env_gas_limit() -> Optional[int]:
+    v = os.environ.get("AVAAI_GAS_LIMIT")
+    if v is None:
+        return None
+    try:
+        return int(v)
+    except ValueError:
+        return None
+
+
+def avaai_env_gas_price_gwei() -> Optional[float]:
+    v = os.environ.get("AVAAI_GAS_PRICE_GWEI")
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except ValueError:
+        return None
+
+
+def avaai_apply_env_to_config(cfg: AvaAIConfig) -> AvaAIConfig:
+    if avaai_env_chain_id() is not None:
+        cfg.chain_id = avaai_env_chain_id()
+    if avaai_env_gas_limit() is not None:
+        cfg.gas_limit_default = avaai_env_gas_limit()
+    if avaai_env_gas_price_gwei() is not None:
+        cfg.gas_price_gwei = avaai_env_gas_price_gwei()
+    return avaai_merge_config_with_env(cfg)
+
+
+def avaai_print_banner(log: logging.Logger) -> None:
+    log.info(avaai_banner())
+
+
+def avaai_print_usage(log: logging.Logger) -> None:
+    log.info(avaai_usage_stats())
+    log.info(avaai_usage_commands())
+
+
+def avaai_supported_chains() -> Dict[int, str]:
+    return {1: "mainnet", 11155111: "sepolia", 56: "bsc", 137: "polygon"}
+
+
+def avaai_chain_id_to_name(chain_id: int) -> str:
+    return avaai_supported_chains().get(chain_id, f"chain_{chain_id}")
+
+
+def avaai_name_to_chain_id(name: str) -> Optional[int]:
+    name = name.strip().lower()
+    for cid, cname in avaai_supported_chains().items():
+        if cname == name:
+            return cid
+    try:
+        return int(name)
+    except ValueError:
+        return None
+
+
+def avaai_blocks_per_year(chain_id: int) -> int:
+    if chain_id == 1:
+        return avaai_blocks_per_year_eth()
+    if chain_id == 56:
+        return avaai_blocks_per_year_bsc()
+    if chain_id == 137:
+        return avaai_blocks_per_year_polygon()
+    return 2_628_000
+
+
+def avaai_default_rpc_for_chain(chain_id: int) -> str:
+    if chain_id == 1:
+        return "https://eth.llamarpc.com"
+    if chain_id == 11155111:
+        return "https://rpc.sepolia.org"
+    return AVAAI_DEFAULT_RPC
+
+
+def avaai_is_mainnet(chain_id: int) -> bool:
+    return chain_id == 1
+
+
+def avaai_is_testnet(chain_id: int) -> bool:
+    return chain_id in (11155111,)
+
+
+def avaai_app_name() -> str:
+    return AVAAI_APP_NAME
