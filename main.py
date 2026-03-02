@@ -640,3 +640,110 @@ class AvaAISimulator:
         return net
 
     def withdraw_sim(self, user: str, token: str, amount_wei: int) -> bool:
+        key = (user.lower(), token.lower())
+        if user not in self._positions or token not in self._positions[user]:
+            return False
+        bal = self._positions[user][token]["deposited"] - self._positions[user][token]["withdrawn"]
+        if amount_wei > bal:
+            return False
+        self._positions[user][token]["withdrawn"] += amount_wei
+        self._total_withdrawn += amount_wei
+        return True
+
+    def credit_yield_sim(self, user: str, token: str, amount_wei: int) -> None:
+        if user not in self._positions:
+            self._positions[user] = {}
+        if token not in self._positions[user]:
+            self._positions[user][token] = {"deposited": 0, "withdrawn": 0, "claimable_yield": 0}
+        self._positions[user][token]["claimable_yield"] += amount_wei
+        self._total_yield += amount_wei
+
+    def get_stats_sim(self) -> GlobalStats:
+        return GlobalStats(
+            total_deposited=self._total_deposited,
+            total_withdrawn=self._total_withdrawn,
+            total_yield_harvested=self._total_yield,
+            strategy_count=len(self._strategies),
+            paused=False,
+        )
+
+    def get_balance_sim(self, user: str, token: str) -> int:
+        if user not in self._positions or token not in self._positions[user]:
+            return 0
+        d = self._positions[user][token]
+        return d["deposited"] - d["withdrawn"]
+
+    def get_claimable_sim(self, user: str, token: str) -> int:
+        if user not in self._positions or token not in self._positions[user]:
+            return 0
+        return self._positions[user][token].get("claimable_yield", 0)
+
+
+# -----------------------------------------------------------------------------
+# Batch and export helpers
+# -----------------------------------------------------------------------------
+def avaai_export_stats_json(stats: GlobalStats, fee_config: Tuple[int, int], constants: Optional[Dict]) -> str:
+    d: Dict[str, Any] = {
+        "total_deposited": stats.total_deposited,
+        "total_withdrawn": stats.total_withdrawn,
+        "total_yield_harvested": stats.total_yield_harvested,
+        "strategy_count": stats.strategy_count,
+        "paused": stats.paused,
+        "performance_fee_bps": fee_config[0],
+        "deposit_fee_bps": fee_config[1],
+    }
+    if constants:
+        d["constants"] = constants
+    return json.dumps(d, indent=2)
+
+
+def avaai_export_strategies_json(strategies: List[StrategyInfo]) -> str:
+    arr = []
+    for s in strategies:
+        arr.append({
+            "strategy_id": s.strategy_id,
+            "target": s.target,
+            "token": s.token,
+            "allocated": s.allocated,
+            "harvested": s.harvested,
+            "cap_bps": s.cap_bps,
+            "active": s.active,
+            "added_at_block": s.added_at_block,
+        })
+    return json.dumps(arr, indent=2)
+
+
+def avaai_load_simulator_from_json(path: str) -> Optional[AvaAISimulator]:
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+        sim = AvaAISimulator()
+        if "total_deposited" in data:
+            sim._total_deposited = data["total_deposited"]
+        if "total_withdrawn" in data:
+            sim._total_withdrawn = data["total_withdrawn"]
+        if "total_yield" in data:
+            sim._total_yield = data["total_yield"]
+        if "positions" in data:
+            sim._positions = data["positions"]
+        if "strategies" in data:
+            sim._strategies = {int(k): v for k, v in data["strategies"].items()}
+        return sim
+    except Exception:
+        return None
+
+
+def avaai_save_simulator_to_json(sim: AvaAISimulator, path: str) -> bool:
+    try:
+        data = {
+            "total_deposited": sim._total_deposited,
+            "total_withdrawn": sim._total_withdrawn,
+            "total_yield": sim._total_yield,
+            "positions": sim._positions,
+            "strategies": sim._strategies,
+        }
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception:
+        return False
