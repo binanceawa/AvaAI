@@ -1389,3 +1389,110 @@ def avaai_parse_fee_bps(s: str) -> Optional[int]:
         return None
 
 
+def avaai_parse_wei(s: str) -> Optional[int]:
+    return avaai_parse_amount(s, 18)
+
+
+def avaai_simulator_demo() -> AvaAISimulator:
+    sim = AvaAISimulator()
+    sim.add_strategy("0x" + "11" * 20, "0x" + "22" * 20, 5000)
+    sim.add_strategy("0x" + "33" * 20, "0x" + "22" * 20, 3000)
+    sim.deposit_sim("0x" + "44" * 20, "0x" + "22" * 20, 1000 * 10**18, 10)
+    sim.deposit_sim("0x" + "55" * 20, "0x" + "22" * 20, 2000 * 10**18, 10)
+    sim.credit_yield_sim("0x" + "44" * 20, "0x" + "22" * 20, 25 * 10**18)
+    sim.credit_yield_sim("0x" + "55" * 20, "0x" + "22" * 20, 50 * 10**18)
+    return sim
+
+
+def avaai_simulator_stats_report(sim: AvaAISimulator) -> List[str]:
+    stats = sim.get_stats_sim()
+    return [
+        f"Total deposited: {stats.total_deposited}",
+        f"Total withdrawn: {stats.total_withdrawn}",
+        f"Total yield: {stats.total_yield_harvested}",
+        f"Strategies: {stats.strategy_count}",
+        f"Paused: {stats.paused}",
+    ]
+
+
+def avaai_contract_call_deposit_abi() -> Dict[str, Any]:
+    return {"inputs": [{"name": "token", "type": "address"}, {"name": "amount", "type": "uint256"}], "name": "deposit", "outputs": [], "stateMutability": "nonpayable", "type": "function"}
+
+
+def avaai_contract_call_withdraw_abi() -> Dict[str, Any]:
+    return {"inputs": [{"name": "token", "type": "address"}, {"name": "amount", "type": "uint256"}], "name": "withdraw", "outputs": [], "stateMutability": "nonpayable", "type": "function"}
+
+
+def avaai_contract_call_claim_yield_abi() -> Dict[str, Any]:
+    return {"inputs": [{"name": "token", "type": "address"}], "name": "claimYield", "outputs": [], "stateMutability": "nonpayable", "type": "function"}
+
+
+def avaai_contract_view_global_stats_abi() -> Dict[str, Any]:
+    return {"inputs": [], "name": "getGlobalStats", "outputs": [{"name": "", "type": "uint256"}, {"name": "", "type": "uint256"}, {"name": "", "type": "uint256"}, {"name": "", "type": "uint256"}, {"name": "", "type": "bool"}], "stateMutability": "view", "type": "function"}
+
+
+def avaai_contract_view_deposit_balance_abi() -> Dict[str, Any]:
+    return {"inputs": [{"name": "user", "type": "address"}, {"name": "token", "type": "address"}], "name": "getDepositBalance", "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"}
+
+
+def avaai_contract_view_claimable_yield_abi() -> Dict[str, Any]:
+    return {"inputs": [{"name": "user", "type": "address"}, {"name": "token", "type": "address"}], "name": "getClaimableYield", "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"}
+
+
+def avaai_abi_function_names() -> List[str]:
+    return ["getGlobalStats", "getDepositBalance", "getClaimableYield", "deposit", "withdraw", "claimYield", "getTokenList", "getStrategy", "strategyCount", "getFeeConfig", "getConstantsBundle"]
+
+
+def avaai_abi_view_functions() -> List[str]:
+    return ["getGlobalStats", "getDepositBalance", "getClaimableYield", "getTokenList", "getStrategy", "strategyCount", "getFeeConfig", "getConstantsBundle"]
+
+
+def avaai_abi_write_functions() -> List[str]:
+    return ["deposit", "withdraw", "claimYield"]
+
+
+def avaai_recommended_gas_deposit() -> int:
+    return 200_000
+
+
+def avaai_recommended_gas_withdraw() -> int:
+    return 150_000
+
+
+def avaai_recommended_gas_claim() -> int:
+    return 180_000
+
+
+def avaai_config_example() -> Dict[str, Any]:
+    return {
+        "rpc_url": "https://eth.llamarpc.com",
+        "contract_address": "0x0000000000000000000000000000000000000000",
+        "chain_id": 1,
+        "gas_limit_default": 300000,
+        "gas_price_gwei": None,
+    }
+
+
+def avaai_config_template_path() -> str:
+    return os.path.join(AVAAI_CONFIG_DIR, "config.json.template")
+
+
+def avaai_write_config_template(path: Optional[str] = None) -> bool:
+    p = path or avaai_config_template_path()
+    return avaai_write_json_file(p, avaai_config_example())
+
+
+def avaai_read_config_template(path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    p = path or avaai_config_template_path()
+    return avaai_read_json_file(p)
+
+
+def avaai_diff_config(current: AvaAIConfig, template: Dict[str, Any]) -> List[str]:
+    diff = []
+    if (template.get("rpc_url") or "") != (current.rpc_url or ""):
+        diff.append("rpc_url")
+    if (template.get("contract_address") or "") != (current.contract_address or ""):
+        diff.append("contract_address")
+    if template.get("chain_id") != current.chain_id:
+        diff.append("chain_id")
+    return diff
