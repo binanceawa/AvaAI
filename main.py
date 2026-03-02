@@ -1603,3 +1603,100 @@ def avaai_is_testnet(chain_id: int) -> bool:
 
 def avaai_app_name() -> str:
     return AVAAI_APP_NAME
+
+
+def avaai_app_version() -> str:
+    return AVAAI_VERSION
+
+
+def avaai_full_version() -> str:
+    return f"{AVAAI_APP_NAME} {AVAAI_VERSION}"
+
+
+def avaai_config_dir_path() -> str:
+    return AVAAI_CONFIG_DIR
+
+
+# -----------------------------------------------------------------------------
+# Main entry
+# -----------------------------------------------------------------------------
+def main() -> int:
+    parser = argparse.ArgumentParser(prog=AVAAI_APP_NAME, description="AvaAI — FundManagerAI companion")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
+    parser.add_argument("--config", default=None, help="Config file path")
+    sub = parser.add_subparsers(dest="command", help="Commands")
+
+    for name, help_text in [
+        ("stats", "Show global stats"),
+        ("strategies", "List strategies"),
+        ("tokens", "List allowed tokens"),
+        ("position", "Show user position"),
+        ("deposit", "Deposit tokens"),
+        ("withdraw", "Withdraw tokens"),
+        ("claim", "Claim yield"),
+        ("config-get", "Show config"),
+        ("config-set", "Set config values"),
+        ("simulate", "Run simulation"),
+        ("export", "Export stats JSON"),
+    ]:
+        sub.add_parser(name, help=help_text)
+
+    pos = sub.add_parser("position")
+    pos.add_argument("--user", default=None, help="User address")
+    pos.add_argument("--token", default=None, help="Token address (optional)")
+    pos.add_argument("--human", action="store_true", help="Show amounts in human units")
+
+    dep = sub.add_parser("deposit")
+    dep.add_argument("token", help="Token address")
+    dep.add_argument("amount", help="Amount (wei or human if --human)")
+    dep.add_argument("--human", action="store_true", help="Amount in human units")
+
+    wd = sub.add_parser("withdraw")
+    wd.add_argument("token", help="Token address")
+    wd.add_argument("amount", help="Amount (wei or human if --human)")
+    wd.add_argument("--human", action="store_true", help="Amount in human units")
+
+    cl = sub.add_parser("claim")
+    cl.add_argument("token", help="Token address")
+
+    cfg_set = sub.add_parser("config-set")
+    cfg_set.add_argument("--rpc", default=None, help="RPC URL")
+    cfg_set.add_argument("--contract", default=None, help="Contract address")
+    cfg_set.add_argument("--chain-id", type=int, default=None, help="Chain ID")
+
+    exp = sub.add_parser("export")
+    exp.add_argument("--output", "-o", default=None, help="Output file")
+
+    args = parser.parse_args()
+    log = setup_logging(getattr(args, "verbose", False))
+
+    if not args.command:
+        parser.print_help()
+        return 0
+
+    config_path = getattr(args, "config", None)
+    cfg = load_config(config_path)
+    client = FundManagerAIClient(cfg, log)
+
+    handlers = {
+        "stats": cmd_stats,
+        "strategies": cmd_strategies,
+        "tokens": cmd_tokens,
+        "position": cmd_position,
+        "deposit": cmd_deposit,
+        "withdraw": cmd_withdraw,
+        "claim": cmd_claim,
+        "config-get": cmd_config_get,
+        "simulate": cmd_simulate,
+        "export": cmd_export,
+    }
+    if args.command == "config-set":
+        return cmd_config_set(args, log)
+    if args.command in handlers:
+        return handlers[args.command](client, args, log)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
