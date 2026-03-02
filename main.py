@@ -854,3 +854,110 @@ def avaai_help_text_position() -> str:
 def avaai_help_text_deposit() -> str:
     return "Submit a deposit transaction (requires private key and token approval)."
 
+
+def avaai_help_text_withdraw() -> str:
+    return "Submit a withdraw transaction (requires private key)."
+
+
+def avaai_help_text_claim() -> str:
+    return "Claim vested yield for a token (requires private key)."
+
+
+def avaai_help_text_config_get() -> str:
+    return "Print current config (rpc, contract, chain_id)."
+
+
+def avaai_help_text_config_set() -> str:
+    return "Save config values (--rpc, --contract, --chain-id)."
+
+
+def avaai_validate_config(cfg: AvaAIConfig) -> List[str]:
+    errs = []
+    if not cfg.rpc_url:
+        errs.append("rpc_url is empty")
+    if cfg.contract_address and not avaai_validate_address(cfg.contract_address):
+        errs.append("contract_address is not a valid 0x40-hex address")
+    if cfg.chain_id < 0:
+        errs.append("chain_id must be non-negative")
+    return errs
+
+
+def avaai_print_errors(errors: List[str], log: logging.Logger) -> None:
+    for e in errors:
+        log.error("Config: %s", e)
+
+
+def avaai_run_with_validation(cfg: AvaAIConfig, log: logging.Logger) -> bool:
+    errs = avaai_validate_config(cfg)
+    if errs:
+        avaai_print_errors(errs, log)
+        return False
+    return True
+
+
+# -----------------------------------------------------------------------------
+# Table and text formatting
+# -----------------------------------------------------------------------------
+def avaai_table_header(cols: List[str], widths: Optional[List[int]] = None) -> str:
+    if not widths:
+        widths = [max(8, len(c)) for c in cols]
+    row = " | ".join(c[:w].ljust(w) for c, w in zip(cols, widths))
+    return row + "\n" + "-+-".join("-" * w for w in widths)
+
+
+def avaai_table_row(values: List[Any], widths: Optional[List[int]] = None) -> str:
+    strs = [str(v) for v in values]
+    if not widths:
+        widths = [max(8, len(s)) for s in strs]
+    return " | ".join(s[:w].ljust(w) for s, w in zip(strs, widths))
+
+
+def avaai_format_wei_table(wei_values: List[int], decimals: int = AVAAI_DECIMALS) -> List[str]:
+    return [wei_to_human(w, decimals) for w in wei_values]
+
+
+def avaai_pad_left(s: str, width: int, char: str = " ") -> str:
+    return s.rjust(width, char)
+
+
+def avaai_pad_right(s: str, width: int, char: str = " ") -> str:
+    return s.ljust(width, char)
+
+
+def avaai_truncate(s: str, max_len: int, suffix: str = "...") -> str:
+    if len(s) <= max_len:
+        return s
+    return s[: max_len - len(suffix)] + suffix
+
+
+def avaai_align_decimal(amount_str: str, width: int) -> str:
+    return amount_str.rjust(width)
+
+
+def avaai_column_widths(rows: List[List[str]]) -> List[int]:
+    if not rows:
+        return []
+    n = max(len(r) for r in rows)
+    widths = [0] * n
+    for row in rows:
+        for i, cell in enumerate(row):
+            if i < n:
+                widths[i] = max(widths[i], len(str(cell)))
+    return widths
+
+
+def avaai_render_table(rows: List[List[Any]], headers: Optional[List[str]] = None) -> str:
+    str_rows = [[str(x) for x in row] for row in rows]
+    if headers:
+        str_rows.insert(0, list(headers))
+    w = avaai_column_widths(str_rows)
+    lines = []
+    for i, row in enumerate(str_rows):
+        line = " | ".join(cell.ljust(w[j]) for j, cell in enumerate(row) if j < len(w))
+        lines.append(line)
+        if headers and i == 0:
+            lines.append("-+-".join("-" * w[j] for j in range(len(w))))
+    return "\n".join(lines)
+
+
+def avaai_csv_row(values: List[Any]) -> str:
