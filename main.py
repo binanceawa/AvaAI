@@ -1068,3 +1068,110 @@ def avaai_checksum_placeholder(addr: str) -> str:
 
 def avaai_config_to_dict(cfg: AvaAIConfig) -> Dict[str, Any]:
     return {
+        "rpc_url": cfg.rpc_url,
+        "contract_address": cfg.contract_address,
+        "chain_id": cfg.chain_id,
+        "gas_limit_default": cfg.gas_limit_default,
+        "gas_price_gwei": cfg.gas_price_gwei,
+        "private_key_set": cfg.private_key is not None and len(cfg.private_key) > 0,
+    }
+
+
+def avaai_dict_to_config(d: Dict[str, Any]) -> AvaAIConfig:
+    cfg = AvaAIConfig()
+    cfg.rpc_url = d.get("rpc_url", cfg.rpc_url)
+    cfg.contract_address = d.get("contract_address")
+    cfg.chain_id = d.get("chain_id", cfg.chain_id)
+    cfg.gas_limit_default = d.get("gas_limit_default", cfg.gas_limit_default)
+    cfg.gas_price_gwei = d.get("gas_price_gwei")
+    cfg.private_key = d.get("private_key")
+    return cfg
+
+
+def avaai_stats_to_dict(stats: GlobalStats) -> Dict[str, Any]:
+    return asdict(stats)
+
+
+def avaai_strategy_to_dict(s: StrategyInfo) -> Dict[str, Any]:
+    return asdict(s)
+
+
+def avaai_position_to_dict(p: UserPosition) -> Dict[str, Any]:
+    return asdict(p)
+
+
+def avaai_read_json_file(path: str) -> Optional[Dict[str, Any]]:
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def avaai_write_json_file(path: str, data: Dict[str, Any]) -> bool:
+    try:
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+def avaai_env_contract() -> Optional[str]:
+    return os.environ.get(AVAAI_CONTRACT_ADDRESS_ENV)
+
+
+def avaai_env_rpc() -> Optional[str]:
+    return os.environ.get(AVAAI_RPC_ENV)
+
+
+def avaai_env_private_key() -> Optional[str]:
+    return os.environ.get(AVAAI_PRIVATE_KEY_ENV)
+
+
+def avaai_set_env_contract(addr: str) -> None:
+    os.environ[AVAAI_CONTRACT_ADDRESS_ENV] = addr
+
+
+def avaai_set_env_rpc(url: str) -> None:
+    os.environ[AVAAI_RPC_ENV] = url
+
+
+def avaai_unset_env_contract() -> None:
+    os.environ.pop(AVAAI_CONTRACT_ADDRESS_ENV, None)
+
+
+def avaai_unset_env_rpc() -> None:
+    os.environ.pop(AVAAI_RPC_ENV, None)
+
+
+def avaai_version_string() -> str:
+    return f"{AVAAI_APP_NAME} v{AVAAI_VERSION}"
+
+
+def avaai_banner() -> str:
+    return f"=== {avaai_version_string()} ===\nFundManagerAI companion — stats, deposit, withdraw, claim, export"
+
+
+def avaai_usage_stats() -> str:
+    return "Usage: ava_ai_app.py [ -v ] [ --config PATH ] <command> [ args ]"
+
+
+def avaai_usage_commands() -> str:
+    return "Commands: stats | strategies | tokens | position | deposit | withdraw | claim | config-get | config-set | simulate | export"
+
+
+def avaai_validate_wei(wei: int) -> bool:
+    return isinstance(wei, int) and wei >= 0
+
+
+def avaai_validate_bps(bps: int) -> bool:
+    return isinstance(bps, int) and 0 <= bps <= AVAAI_BPS
+
+
+def avaai_validate_strategy_id(sid: int) -> bool:
+    return isinstance(sid, int) and sid >= 1
+
+
+def avaai_default_gas_limit() -> int:
+    return 300_000
