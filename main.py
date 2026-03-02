@@ -961,3 +961,110 @@ def avaai_render_table(rows: List[List[Any]], headers: Optional[List[str]] = Non
 
 
 def avaai_csv_row(values: List[Any]) -> str:
+    def escape(s: str) -> str:
+        if "," in s or '"' in s or "\n" in s:
+            return '"' + s.replace('"', '""') + '"'
+        return s
+    return ",".join(escape(str(v)) for v in values)
+
+
+def avaai_export_csv(rows: List[List[Any]], headers: Optional[List[str]] = None) -> str:
+    out = []
+    if headers:
+        out.append(avaai_csv_row(headers))
+    for row in rows:
+        out.append(avaai_csv_row(row))
+    return "\n".join(out)
+
+
+def avaai_parse_csv_line(line: str) -> List[str]:
+    out = []
+    cur = []
+    in_quotes = False
+    for c in line:
+        if c == '"':
+            in_quotes = not in_quotes
+        elif (c == "," and not in_quotes):
+            out.append("".join(cur))
+            cur = []
+        else:
+            cur.append(c)
+    out.append("".join(cur))
+    return out
+
+
+def avaai_safe_div(num: int, denom: int, default: int = 0) -> int:
+    if denom == 0:
+        return default
+    return num // denom
+
+
+def avaai_safe_div_decimal(num: Decimal, denom: Decimal, default: Decimal = Decimal(0)) -> Decimal:
+    if denom == 0:
+        return default
+    return num / denom
+
+
+def avaai_bps_from_percent(percent: float) -> int:
+    return int(percent * AVAAI_BPS / 100)
+
+
+def avaai_percent_from_bps(bps: int) -> float:
+    return 100.0 * bps / AVAAI_BPS
+
+
+def avaai_wei_from_ether(eth: float) -> int:
+    return int(Decimal(eth) * Decimal(10 ** AVAAI_DECIMALS))
+
+
+def avaai_ether_from_wei(wei: int) -> float:
+    return float(Decimal(wei) / Decimal(10 ** AVAAI_DECIMALS))
+
+
+def avaai_round_wei(wei: int, decimals: int = 0) -> int:
+    if decimals <= 0:
+        return wei
+    factor = 10 ** decimals
+    return (wei // factor) * factor
+
+
+def avaai_min_wei(a: int, b: int) -> int:
+    return min(a, b)
+
+
+def avaai_max_wei(a: int, b: int) -> int:
+    return max(a, b)
+
+
+def avaai_clamp_wei(wei: int, low: int, high: int) -> int:
+    return max(low, min(high, wei))
+
+
+def avaai_is_zero_address(addr: str) -> bool:
+    if not addr:
+        return True
+    addr = addr.strip().lower()
+    if addr.startswith("0x"):
+        addr = addr[2:]
+    return addr == "0" * 40 or addr == ""
+
+
+def avaai_compare_address(a: str, b: str) -> bool:
+    return (a or "").strip().lower() == (b or "").strip().lower()
+
+
+def avaai_normalize_address(addr: str) -> str:
+    if not addr:
+        return ""
+    addr = addr.strip()
+    if addr.startswith("0x"):
+        return "0x" + addr[2:].lower()
+    return "0x" + addr.lower()
+
+
+def avaai_checksum_placeholder(addr: str) -> str:
+    return avaai_normalize_address(addr)
+
+
+def avaai_config_to_dict(cfg: AvaAIConfig) -> Dict[str, Any]:
+    return {
