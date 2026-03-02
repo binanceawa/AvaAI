@@ -533,3 +533,110 @@ def avaai_vested_amount(vesting_amount: int, start_block: int, end_block: int, c
 def avaai_estimate_apy_from_harvest(harvested_wei: int, allocated_wei: int, blocks_per_year: int = 2_628_000) -> str:
     if allocated_wei == 0:
         return "0%"
+    ratio = Decimal(harvested_wei) / Decimal(allocated_wei)
+    apy = ratio * Decimal(blocks_per_year)
+    return f"{float(apy) * 100:.2f}%"
+
+
+def avaai_format_wei(wei: int, decimals: int = AVAAI_DECIMALS) -> str:
+    return wei_to_human(wei, decimals)
+
+
+def avaai_short_address(addr: str, prefix: int = 6, suffix: int = 4) -> str:
+    if not addr or len(addr) < prefix + suffix:
+        return addr or ""
+    if addr.startswith("0x"):
+        return f"0x{addr[2:2+prefix]}...{addr[-suffix:]}"
+    return f"{addr[:prefix]}...{addr[-suffix:]}"
+
+
+def avaai_validate_address(addr: str) -> bool:
+    if not addr or not isinstance(addr, str):
+        return False
+    addr = addr.strip()
+    if not addr.startswith("0x"):
+        return False
+    rest = addr[2:].lower()
+    if len(rest) != 40:
+        return False
+    return all(c in "0123456789abcdef" for c in rest)
+
+
+def avaai_parse_amount(s: str, decimals: int = AVAAI_DECIMALS) -> Optional[int]:
+    try:
+        return human_to_wei(s.strip(), decimals)
+    except Exception:
+        return None
+
+
+def avaai_report_global(stats: GlobalStats, perf_bps: int, dep_bps: int) -> List[str]:
+    lines = [
+        "=== FundManagerAI Global Report ===",
+        f"Total deposited (wei):    {stats.total_deposited}",
+        f"Total withdrawn (wei):    {stats.total_withdrawn}",
+        f"Total yield harvested:    {stats.total_yield_harvested}",
+        f"Strategy count:           {stats.strategy_count}",
+        f"Paused:                   {stats.paused}",
+        f"Performance fee (bps):    {perf_bps} -> {bps_to_percent(perf_bps)}",
+        f"Deposit fee (bps):        {dep_bps} -> {bps_to_percent(dep_bps)}",
+    ]
+    return lines
+
+
+def avaai_report_strategy(s: StrategyInfo) -> List[str]:
+    return [
+        f"Strategy #{s.strategy_id}",
+        f"  target:       {avaai_short_address(s.target)}",
+        f"  token:        {avaai_short_address(s.token)}",
+        f"  allocated:    {s.allocated} wei",
+        f"  harvested:    {s.harvested} wei",
+        f"  cap_bps:      {s.cap_bps}",
+        f"  active:       {s.active}",
+        f"  added_block:  {s.added_at_block}",
+    ]
+
+
+def avaai_report_position(user: str, positions: List[UserPosition]) -> List[str]:
+    lines = [f"=== Position for {avaai_short_address(user)} ==="]
+    for p in positions:
+        lines.append(f"  token {avaai_short_address(p.token)}: balance={p.deposit_balance} wei, claimable={p.claimable_yield} wei")
+    return lines
+
+
+# -----------------------------------------------------------------------------
+# Simulated backend (no RPC)
+# -----------------------------------------------------------------------------
+class AvaAISimulator:
+    def __init__(self):
+        self._total_deposited = 0
+        self._total_withdrawn = 0
+        self._total_yield = 0
+        self._strategies: Dict[int, Dict[str, Any]] = {}
+        self._positions: Dict[str, Dict[str, Dict[str, int]]] = {}
+        self._strategy_counter = 0
+
+    def add_strategy(self, target: str, token: str, cap_bps: int = 5000) -> int:
+        self._strategy_counter += 1
+        self._strategies[self._strategy_counter] = {
+            "target": target,
+            "token": token,
+            "allocated": 0,
+            "harvested": 0,
+            "cap_bps": cap_bps,
+            "active": True,
+        }
+        return self._strategy_counter
+
+    def deposit_sim(self, user: str, token: str, amount_wei: int, fee_bps: int = 10) -> int:
+        fee = avaai_fee_from_bps(amount_wei, fee_bps)
+        net = amount_wei - fee
+        key = (user.lower(), token.lower())
+        if user not in self._positions:
+            self._positions[user] = {}
+        if token not in self._positions[user]:
+            self._positions[user][token] = {"deposited": 0, "withdrawn": 0, "claimable_yield": 0}
+        self._positions[user][token]["deposited"] += net
+        self._total_deposited += amount_wei
+        return net
+
+    def withdraw_sim(self, user: str, token: str, amount_wei: int) -> bool:
