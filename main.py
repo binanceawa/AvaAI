@@ -1175,3 +1175,110 @@ def avaai_validate_strategy_id(sid: int) -> bool:
 
 def avaai_default_gas_limit() -> int:
     return 300_000
+
+
+def avaai_default_decimals() -> int:
+    return AVAAI_DECIMALS
+
+
+def avaai_default_bps() -> int:
+    return AVAAI_BPS
+
+
+def avaai_blocks_per_year_eth() -> int:
+    return 2_628_000
+
+
+def avaai_blocks_per_year_bsc() -> int:
+    return 10_512_000
+
+
+def avaai_blocks_per_year_polygon() -> int:
+    return 26_280_000
+
+
+def avaai_estimate_yield_apy(harvested: int, allocated: int, blocks_per_year: int) -> Decimal:
+    if allocated == 0:
+        return Decimal(0)
+    return Decimal(harvested) / Decimal(allocated) * Decimal(blocks_per_year)
+
+
+def avaai_estimate_yield_apy_percent(harvested: int, allocated: int, blocks_per_year: int = 2_628_000) -> str:
+    apy = avaai_estimate_yield_apy(harvested, allocated, blocks_per_year)
+    return f"{float(apy) * 100:.2f}%"
+
+
+def avaai_fee_wei(amount_wei: int, bps: int) -> int:
+    return (amount_wei * bps) // AVAAI_BPS
+
+
+def avaai_net_deposit_wei(gross_wei: int, deposit_fee_bps: int) -> int:
+    return gross_wei - avaai_fee_wei(gross_wei, deposit_fee_bps)
+
+
+def avaai_net_harvest_wei(gross_wei: int, perf_fee_bps: int) -> int:
+    return gross_wei - avaai_fee_wei(gross_wei, perf_fee_bps)
+
+
+def avaai_cap_wei(total_deposits_token: int, cap_bps: int) -> int:
+    return (total_deposits_token * cap_bps) // AVAAI_BPS
+
+
+def avaai_remaining_cap_wei(allocated: int, cap_wei: int) -> int:
+    return max(0, cap_wei - allocated)
+
+
+def avaai_vesting_linear(vesting_amount: int, start_block: int, end_block: int, at_block: int) -> int:
+    if at_block >= end_block:
+        return vesting_amount
+    if at_block <= start_block:
+        return 0
+    elapsed = at_block - start_block
+    total = end_block - start_block
+    if total == 0:
+        return 0
+    return (vesting_amount * elapsed) // total
+
+
+def avaai_vesting_remaining_blocks(end_block: int, current_block: int) -> int:
+    if current_block >= end_block:
+        return 0
+    return end_block - current_block
+
+
+def avaai_format_strategy_line(s: StrategyInfo, human: bool = False) -> str:
+    alloc_str = wei_to_human(s.allocated) if human else str(s.allocated)
+    harv_str = wei_to_human(s.harvested) if human else str(s.harvested)
+    return f"#{s.strategy_id} target={avaai_short_address(s.target)} token={avaai_short_address(s.token)} allocated={alloc_str} harvested={harv_str} active={s.active}"
+
+
+def avaai_format_position_line(p: UserPosition, token_short: str, human: bool = False) -> str:
+    bal_str = wei_to_human(p.deposit_balance) if human else str(p.deposit_balance)
+    claim_str = wei_to_human(p.claimable_yield) if human else str(p.claimable_yield)
+    return f"token={token_short} balance={bal_str} claimable={claim_str}"
+
+
+def avaai_sort_strategies_by_allocated(strategies: List[StrategyInfo]) -> List[StrategyInfo]:
+    return sorted(strategies, key=lambda s: s.allocated, reverse=True)
+
+
+def avaai_sort_strategies_by_harvested(strategies: List[StrategyInfo]) -> List[StrategyInfo]:
+    return sorted(strategies, key=lambda s: s.harvested, reverse=True)
+
+
+def avaai_filter_active_strategies(strategies: List[StrategyInfo]) -> List[StrategyInfo]:
+    return [s for s in strategies if s.active]
+
+
+def avaai_filter_strategies_for_token(strategies: List[StrategyInfo], token: str) -> List[StrategyInfo]:
+    tok = (token or "").strip().lower()
+    return [s for s in strategies if (s.token or "").strip().lower() == tok]
+
+
+def avaai_aggregate_allocated(strategies: List[StrategyInfo]) -> int:
+    return sum(s.allocated for s in strategies)
+
+
+def avaai_aggregate_harvested(strategies: List[StrategyInfo]) -> int:
+    return sum(s.harvested for s in strategies)
+
