@@ -212,3 +212,110 @@ class FundManagerAIClient:
                 total_deposited=r[0],
                 total_withdrawn=r[1],
                 total_yield_harvested=r[2],
+                strategy_count=r[3],
+                paused=r[4],
+            )
+        except Exception as e:
+            self.log.error("getGlobalStats failed: %s", e)
+            return None
+
+    def get_deposit_balance(self, user: str, token: str) -> Optional[int]:
+        if not self.is_ready:
+            return None
+        try:
+            return self._contract.functions.getDepositBalance(
+                self._w3.to_checksum_address(user),
+                self._w3.to_checksum_address(token),
+            ).call()
+        except Exception as e:
+            self.log.error("getDepositBalance failed: %s", e)
+            return None
+
+    def get_claimable_yield(self, user: str, token: str) -> Optional[int]:
+        if not self.is_ready:
+            return None
+        try:
+            return self._contract.functions.getClaimableYield(
+                self._w3.to_checksum_address(user),
+                self._w3.to_checksum_address(token),
+            ).call()
+        except Exception as e:
+            self.log.error("getClaimableYield failed: %s", e)
+            return None
+
+    def get_token_list(self) -> List[str]:
+        if not self.is_ready:
+            return []
+        try:
+            addrs = self._contract.functions.getTokenList().call()
+            return [a for a in addrs if a]
+        except Exception as e:
+            self.log.error("getTokenList failed: %s", e)
+            return []
+
+    def get_strategy(self, strategy_id: int) -> Optional[StrategyInfo]:
+        if not self.is_ready:
+            return None
+        try:
+            r = self._contract.functions.getStrategy(strategy_id).call()
+            return StrategyInfo(
+                strategy_id=strategy_id,
+                target=r[0],
+                token=r[1],
+                allocated=r[2],
+                harvested=r[3],
+                cap_bps=r[4],
+                active=r[5],
+                added_at_block=r[6],
+            )
+        except Exception as e:
+            self.log.error("getStrategy(%s) failed: %s", strategy_id, e)
+            return None
+
+    def get_strategy_count(self) -> int:
+        if not self.is_ready:
+            return 0
+        try:
+            return self._contract.functions.strategyCount().call()
+        except Exception:
+            return 0
+
+    def get_fee_config(self) -> Tuple[int, int]:
+        if not self.is_ready:
+            return 0, 0
+        try:
+            r = self._contract.functions.getFeeConfig().call()
+            return (r[0], r[1])
+        except Exception:
+            return 0, 0
+
+    def get_constants_bundle(self) -> Optional[Dict[str, Any]]:
+        if not self.is_ready:
+            return None
+        try:
+            r = self._contract.functions.getConstantsBundle().call()
+            return {
+                "bps": r[0],
+                "max_fee_bps": r[1],
+                "min_deposit": r[2],
+                "max_strategies": r[3],
+                "harvest_cooldown_blocks": r[4],
+                "vesting_blocks": r[5],
+                "strategy_cap_bps": r[6],
+            }
+        except Exception:
+            return None
+
+    def deposit(self, token: str, amount_wei: int) -> Optional[str]:
+        if not self.is_ready or not self._account:
+            self.log.error("Not ready or no account for deposit")
+            return None
+        try:
+            tx = self._contract.functions.deposit(
+                self._w3.to_checksum_address(token),
+                amount_wei,
+            ).build_transaction({
+                "from": self._account.address,
+                "gas": self.config.gas_limit_default,
+            })
+            if self.config.gas_price_gwei:
